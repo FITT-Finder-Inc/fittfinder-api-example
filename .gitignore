@@ -1,0 +1,5 @@
+.env
+*.local
+*.tgz
+dist/
+node_modules/

@@ -1,9 +1,15 @@
-import jwt_decode from 'jwt-decode';
-import got, { Got, Headers } from 'got';
-import { getResponseData, GraphQLDataResponse, GraphQLRequest, GraphQLResponse } from './graphql';
-import { rootLogger } from './logger';
+import got, { Got, Headers, HTTPError } from "got";
+import { jwtDecode } from "jwt-decode";
+import {
+  getResponseData,
+  GraphQLDataResponse,
+  GraphQLRequest,
+  GraphQLResponse,
+} from "./graphql.js";
+import { rootLogger } from "./logger.js";
+import { asError } from "catch-unknown";
 
-const logger = rootLogger.child({ module: 'FittFinderApi' });
+const logger = rootLogger.child({ module: "FittFinderApi" });
 
 interface LoginResponse {
   token: string;
@@ -34,14 +40,14 @@ export class FittFinderApi {
     url: string,
     private readonly username: string,
     private readonly password: string,
-    userAgent = 'FITT Finder API Example'
+    userAgent = "FITT Finder API Example"
   ) {
     this.agent = got.extend({
       prefixUrl: url,
       headers: {
-        'user-agent': userAgent
+        "user-agent": userAgent,
       },
-      responseType: 'json'
+      responseType: "json",
     });
   }
 
@@ -51,21 +57,28 @@ export class FittFinderApi {
       getResponseData(response, body);
       return response as GraphQLDataResponse;
     } catch (e) {
-      logger.warn(`API request failed: ${JSON.stringify({ error: e, body, response })}`);
+      logger.warn(
+        `API request failed: ${JSON.stringify({ error: e, body, response })}`
+      );
       throw e;
     }
   }
 
-  public async apiRequestChecked(body: GraphQLRequest): Promise<GraphQLResponse> {
+  public async apiRequestChecked(
+    body: GraphQLRequest
+  ): Promise<GraphQLResponse> {
     const headers: Headers = {};
     const options = { headers, json: body };
     for (let authRetry = false; ; ) {
       headers.authorization = await this.getAuthHeader();
       try {
-        const response = await this.agent.post<GraphQLResponse>('graphql', options);
+        const response = await this.agent.post<GraphQLResponse>(
+          "graphql",
+          options
+        );
         return response.body;
       } catch (e) {
-        if (e instanceof got.HTTPError) {
+        if (e instanceof HTTPError) {
           if (e.response.statusCode === 401 && !authRetry) {
             this.apiAccessToken = undefined;
             this.apiTokenExpiration = undefined;
@@ -73,13 +86,15 @@ export class FittFinderApi {
             continue;
           }
 
-          const body: any = e.response.body;
+          const { body } = e.response;
           if (Array.isArray(body?.errors)) {
             const errors: { message: string }[] = body.errors.filter(
-              (error: any) => typeof error?.message === 'string'
+              (error: Error) => typeof error?.message === "string"
             );
             if (errors.length > 0) {
-              throw new Error(`API request failed: ${errors.map(e => e.message).join(', ')}`);
+              throw new Error(
+                `API request failed: ${errors.map((e) => e.message).join(", ")}`
+              );
             }
           }
         }
@@ -89,22 +104,26 @@ export class FittFinderApi {
   }
 
   private async getAuthHeader(): Promise<string | undefined> {
-    const hasValidToken = this.apiTokenExpiration != null && this.apiTokenExpiration > Date.now() / 1000;
+    const hasValidToken =
+      this.apiTokenExpiration != null &&
+      this.apiTokenExpiration > Date.now() / 1000;
     if (!hasValidToken && this.username && this.password) {
       try {
-        const response = await this.agent.post<LoginResponse>('login', {
+        const response = await this.agent.post<LoginResponse>("login", {
           json: {
             loginId: this.username,
-            password: this.password
-          }
+            password: this.password,
+          },
         });
         const { token } = response.body;
-        const claims = jwt_decode<JwtClaims>(token);
-        logger.debug(`Authenticated to ${claims.aud} as ${claims.sub} with role(s) ${claims.roles?.join(', ')}`);
+        const claims = jwtDecode<JwtClaims>(token);
+        logger.debug(
+          `Authenticated to ${claims.aud} as ${claims.sub} with role(s) ${claims.roles?.join(", ")}`
+        );
         this.apiAccessToken = token;
         this.apiTokenExpiration = claims.exp;
       } catch (e) {
-        logger.warn(`Login failed: ${e.message}`);
+        logger.warn(`Login failed: ${asError(e).message}`);
         throw e;
       }
     }
@@ -116,15 +135,23 @@ export class FittFinderApi {
 }
 
 export function createFittFinderApi(): FittFinderApi {
-  const { FITTFINDER_API_URL, FITTFINDER_API_USERNAME, FITTFINDER_API_PASSWORD } = process.env;
+  const {
+    FITTFINDER_API_URL,
+    FITTFINDER_API_USERNAME,
+    FITTFINDER_API_PASSWORD,
+  } = process.env;
   if (!FITTFINDER_API_URL) {
-    throw new Error('FITTFINDER_API_URL not configured');
+    throw new Error("FITTFINDER_API_URL not configured");
   }
   if (!FITTFINDER_API_USERNAME) {
-    throw new Error('FITTFINDER_API_USERNAME not configured');
+    throw new Error("FITTFINDER_API_USERNAME not configured");
   }
   if (!FITTFINDER_API_PASSWORD) {
-    throw new Error('FITTFINDER_API_PASSWORD not configured');
+    throw new Error("FITTFINDER_API_PASSWORD not configured");
   }
-  return new FittFinderApi(FITTFINDER_API_URL, FITTFINDER_API_USERNAME, FITTFINDER_API_PASSWORD);
+  return new FittFinderApi(
+    FITTFINDER_API_URL,
+    FITTFINDER_API_USERNAME,
+    FITTFINDER_API_PASSWORD
+  );
 }

@@ -1,22 +1,22 @@
 export interface GraphQLRequest {
   query: string;
   operationName?: string;
-  variables?: Record<string, any>;
+  variables?: Record<string, unknown>;
 }
 
 export interface GraphQLResponse {
-  data?: any;
+  data?: unknown;
   errors?: GraphQLError[];
-  extensions?: Record<string, any>;
+  extensions?: Record<string, unknown>;
 }
 
-export type GraphQLDataResponse = GraphQLResponse & { data: any };
+export type GraphQLDataResponse = GraphQLResponse & { data: unknown };
 
 export interface GraphQLError {
   message: string;
   locations?: GraphQLLocation[];
   path?: (string | number)[];
-  extensions?: Record<string, any>;
+  extensions?: Record<string, unknown>;
 }
 
 export interface GraphQLLocation {
@@ -27,7 +27,7 @@ export interface GraphQLLocation {
 export function buildMutation(
   name: string,
   varTypes: Record<string, string>,
-  variables: Record<string, any>,
+  variables: Record<string, unknown>,
   query: string,
   operationName = ucFirst(name)
 ): GraphQLRequest {
@@ -44,7 +44,7 @@ export function buildMutation(
 export function buildQuery(
   name: string,
   varTypes: Record<string, string>,
-  variables: Record<string, any>,
+  variables: Record<string, unknown>,
   query: string,
   operationName = ucFirst(name)
 ): GraphQLRequest {
@@ -67,50 +67,70 @@ function findQueryVars(query: string): Set<string> {
   return result;
 }
 
-function declVars(varTypes: Record<string, string>, variables: Record<string, any>): string {
+function declVars(
+  varTypes: Record<string, string>,
+  variables: Record<string, unknown>
+): string {
   return Object.entries(varTypes)
     .filter(([k]) => k in variables)
     .map(([k, v]) => `$${k}: ${v}`)
-    .join(', ');
+    .join(", ");
 }
 
-function mapVars(variables: Record<string, any>, exclude: Set<string>): string {
+function mapVars(
+  variables: Record<string, unknown>,
+  exclude: Set<string>
+): string {
   return Object.keys(variables)
     .filter((k) => !exclude.has(k))
     .map((k) => `${k}: $${k}`)
-    .join(', ');
+    .join(", ");
 }
 
 function ucFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.substring(1);
 }
 
-export function hasExceptionCode(response: GraphQLResponse, code: string): boolean {
-  return response.errors != null && response.errors.some((err) => err.extensions?.exception?.code === code);
+export function hasExceptionCode(
+  response: GraphQLResponse,
+  code: string
+): boolean {
+  return (
+    response.errors != null &&
+    response.errors.some(
+      (err) =>
+        isObject(err.extensions?.exception) &&
+        err.extensions.exception.code === code
+    )
+  );
+}
+
+export function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function isDuplicateError(response: GraphQLResponse): boolean {
-  return hasExceptionCode(response, 'ER_DUP_ENTRY');
+  return hasExceptionCode(response, "ER_DUP_ENTRY");
 }
 
 export function isNotFoundError(response: GraphQLResponse): boolean {
-  return hasExceptionCode(response, 'NOT_FOUND');
+  return hasExceptionCode(response, "NOT_FOUND");
 }
 
 export function getResponseData(
   response: GraphQLResponse,
   operation?: GraphQLRequest | string | (() => string | undefined)
-): any {
+): unknown {
   function decorateMessage(message: string): string {
     let operationStr;
     switch (typeof operation) {
-      case 'string':
+      case "string":
         operationStr = operation;
         break;
-      case 'function':
+      case "function":
         operationStr = operation();
         break;
-      case 'object':
+      case "object":
         operationStr = describeRequest(operation);
         break;
     }
@@ -130,7 +150,7 @@ export function getResponseData(
     throw new Error(decorateMessage(response.errors[0].message));
   }
   if (!response.data) {
-    throw new Error(decorateMessage('No data returned for API request'));
+    throw new Error(decorateMessage("No data returned for API request"));
   }
   return response.data;
 }

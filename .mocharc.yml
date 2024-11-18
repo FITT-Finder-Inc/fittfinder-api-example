@@ -1,7 +1,0 @@
-forbid-only: true
-recursive: true
-require:
-  - ts-node/register
-  - dotenv/config
-timeout: 5000
-watch-extensions: ts

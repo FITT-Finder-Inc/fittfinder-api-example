@@ -91,16 +91,22 @@ function ucFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.substring(1);
 }
 
+function isAnyOf<T>(actual: T, expected: T | T[]): boolean {
+  return Array.isArray(expected)
+    ? expected.includes(actual)
+    : actual === expected;
+}
+
 export function hasExceptionCode(
   response: GraphQLResponse,
-  code: string
+  code: string | string[]
 ): boolean {
   return (
     response.errors != null &&
     response.errors.some(
       (err) =>
         isObject(err.extensions?.exception) &&
-        err.extensions.exception.code === code
+        isAnyOf(err.extensions.exception.code, code)
     )
   );
 }
@@ -110,7 +116,7 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function isDuplicateError(response: GraphQLResponse): boolean {
-  return hasExceptionCode(response, "ER_DUP_ENTRY");
+  return hasExceptionCode(response, ["DUPLICATE_KEY", "ER_DUP_ENTRY"]);
 }
 
 export function isNotFoundError(response: GraphQLResponse): boolean {
